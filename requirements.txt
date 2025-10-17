@@ -3,3 +3,5 @@ pandas
 plotly
 prophet
 requests
+plotly
+numpy
