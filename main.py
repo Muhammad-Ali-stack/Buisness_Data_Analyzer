@@ -15,14 +15,14 @@ groq_api_key = os.getenv("GROQ_API_KEY", st.secrets.get("GROQ_API_KEY", None))
 
 # Streamlit config
 st.set_page_config(page_title="Business Data Analyzer", layout="wide")
-st.title("Business Data Analyzer")
+st.title("📊 Business Data Analyzer")
 
-uploaded = st.file_uploader("Upload your business CSV file", type=["csv"])
+uploaded = st.file_uploader("📁 Upload your business CSV file", type=["csv"])
 
 def get_available_groq_model(api_key: str) -> str:
     """
     Fetches the list of available models from Groq API and returns
-    the first usable chat model.
+    the first usable chat model (e.g., Llama or Mixtral).
     """
     try:
         url = "https://api.groq.com/openai/v1/models"
@@ -31,74 +31,86 @@ def get_available_groq_model(api_key: str) -> str:
         response.raise_for_status()
         data = response.json()
 
-        # Find any Llama or Mixtral chat model
         for m in data.get("data", []):
             if "llama" in m["id"] or "mixtral" in m["id"]:
                 return m["id"]
 
-        # Fallback
         return "llama-3.3-70b-versatile"
     except Exception as e:
-        st.warning(f"⚠️ Could not auto-detect model: {e}")
+        st.warning(f"⚠️ Could not auto-detect Groq model: {e}")
         return "llama-3.3-70b-versatile"
 
-# 🧠 Automatically choose a valid Groq model
+# 🧠 Auto-select model
 groq_model = get_available_groq_model(groq_api_key)
 
 if uploaded:
+    # Load CSV
     df = load_csv(uploaded)
-    st.write("### Preview", df.head())
+    st.write("### 👀 Preview", df.head())
 
     st.divider()
-    st.subheader("KPIs")
+
+    # 📈 KPIs Section
+    st.subheader("📌 Key Performance Indicators (KPIs)")
     kpis = get_basic_kpis(df)
     for k, v in kpis.items():
         st.metric(label=k, value=round(v, 2) if isinstance(v, (int, float)) else v)
 
     st.divider()
+
+    # 📊 Visualization
     visualize_data(df)
 
-    # 🧠 AI Insights (Groq)
-    if st.button("Generate AI Insights"):
+    # 🧠 AI Insights
+    if st.button("🧩 Generate AI Insights"):
         with st.spinner("Analyzing data using Groq..."):
             insights = generate_ai_insights(df, groq_api_key)
             st.markdown(insights)
 
-    # 🔮 Forecasting
-    if "revenue" in df.columns or "sales" in df.columns:
+    # 🔮 Forecasting (Optional)
+    if any(col in df.columns for col in ["revenue", "sales"]):
         col = "revenue" if "revenue" in df.columns else "sales"
         if st.button("🔮 Forecast Next Month"):
             with st.spinner("Forecasting with Prophet..."):
                 next_month, forecast = forecast_next_month(df, col)
-                st.success(f"Predicted {col} next month: {round(next_month, 2)}")
+                st.success(f"📅 Predicted {col} next month: **{round(next_month, 2)}**")
 
-    # 💬 CSV Question Answering
+        # 💬 Ask AI a Question
     st.divider()
-    st.subheader("Ask a Question About Your Data")
+    st.subheader("💬 Ask a Question About Your Data")
 
     user_query = st.text_input(
         "Type your question here (e.g., Which product had the highest revenue?)"
     )
 
-    if st.button("Ask AI"):
-        if user_query.strip() == "":
+    if st.button("🤖 Ask AI"):
+        if not user_query.strip():
             st.warning("Please enter a question.")
         elif not groq_api_key:
-            st.error("GROQ API key missing. Please add it in .streamlit/secrets.toml")
+            st.error("GROQ API key missing. Please add it in `.streamlit/secrets.toml`.")
         else:
-            with st.spinner("Thinking..."):
+            with st.spinner("Analyzing your data with Groq..."):
                 try:
                     client = Groq(api_key=groq_api_key)
-                    sample_data = df.head(20).to_csv(index=False)
+
+                    # ✅ Limit data size (to avoid context overflow)
+                    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+                    sample_cols = numeric_cols[:5] if numeric_cols else df.columns[:5]
+                    sample_data = df[sample_cols].sample(min(5, len(df))).to_csv(index=False)
 
                     prompt = f"""
                     You are a business data analysis assistant.
-                    Here is a sample of the uploaded CSV data:
+                    Here is a small sample of the uploaded CSV data (truncated for context safety):
+
                     {sample_data}
 
-                    The user asks: {user_query}
-                    Please answer clearly and concisely based only on the data provided.
+                    The user asks: "{user_query}"
+
+                    Please answer concisely based only on this sample data.
                     """
+
+                    # ✅ Hard cap prompt to 2500 characters
+                    prompt = prompt[:2500]
 
                     response = client.chat.completions.create(
                         model=groq_model,
@@ -113,10 +125,13 @@ if uploaded:
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
 
-# Footer Section
-st.markdown("""
+# Footer
+st.markdown(
+    """
 ---
 <div style='text-align: center; padding-top: 20px; font-size: 15px; color: gray;'>
-    Made by <b>Muhammad Ali</b>
+    Made with ❤️ by <b>Muhammad Ali</b>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
